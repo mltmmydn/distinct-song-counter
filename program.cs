@@ -8,55 +8,42 @@ class Program
 {
     static void Main()
     {
-        string inputPath = "exhibit-a.txt";
-        string outputPath = "output.txt";
+        const string input = "exhibitA-input.csv";
+        const string output = "output.csv";
+        var target = new DateTime(2016, 8, 10);
 
-        DateTime targetDate = new DateTime(2016, 8, 10);
-
-        var userSongs = new Dictionary<string, HashSet<string>>();
-
-        foreach (var line in File.ReadLines(inputPath).Skip(1))
-        {
-            if (string.IsNullOrWhiteSpace(line)) continue; 
-          
-            var parts = line.Split(new char[] { '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length < 4) continue;
-
-            string songId = parts[1].Trim();
-            string clientId = parts[2].Trim();
-            string timestamp = parts[3].Trim();
-
-            if (!DateTime.TryParseExact(timestamp,
-                    new string[] { "dd/MM/yyyy HH:mm:ss", "dd/MM/yyyy" },
-                    CultureInfo.InvariantCulture,
-                    DateTimeStyles.None,
-                    out DateTime playTime))
-                continue;
-
-            if (playTime.Date != targetDate.Date)
-                continue;
-
-            if (!userSongs.ContainsKey(clientId))
-                userSongs[clientId] = new HashSet<string>();
-
-            userSongs[clientId].Add(songId);
-        }
+        var userSongs = File.ReadLines(input)
+            .Skip(1)
+            .Where(l => !string.IsNullOrWhiteSpace(l))
+            .Select(l => l.Split(new[] { '\t', ',' }))
+            .Where(p => p.Length >= 4 && DateTime.TryParseExact(
+                p[3].Trim(),
+                "dd/MM/yyyy HH:mm:ss",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out _))
+            .Select(p => new
+            {
+                Song = p[1].Trim(),
+                Client = p[2].Trim(),
+                Date = DateTime.ParseExact(p[3].Trim(), "dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture)
+            })
+            .Where(x => x.Date.Date == target.Date)
+            .GroupBy(x => x.Client)
+            .ToDictionary(g => g.Key, g => g.Select(x => x.Song).Distinct().Count());
 
         var distribution = userSongs
-            .GroupBy(kv => kv.Value.Count)
-            .OrderBy(g => g.Key)
-            .ToDictionary(g => g.Key, g => g.Count());
+            .GroupBy(x => x.Value)
+            .OrderBy(x => x.Key)
+            .ToDictionary(x => x.Key, x => x.Count());
 
-        using var writer = new StreamWriter(outputPath);
-        writer.WriteLine("DISTINCT_PLAY_COUNT\tCLIENT_COUNT");
+        using var writer = new StreamWriter(output);
+        writer.WriteLine("DISTINCT_PLAY_COUNT,CLIENT_COUNT");
         foreach (var kv in distribution)
-            writer.WriteLine($"{kv.Key}\t{kv.Value}");
+            writer.WriteLine($"{kv.Key},{kv.Value}");
 
-        Console.WriteLine("Processing completed. Results written to: " + outputPath);
-
-        int maxDistinct = distribution.Keys.Any() ? distribution.Keys.Max() : 0;
-        int usersWith346 = distribution.ContainsKey(346) ? distribution[346] : 0;
-        Console.WriteLine("Users with 346 songs (Q2): " + usersWith346);
-        Console.WriteLine("Max distinct songs (Q3): " + maxDistinct);
+        Console.WriteLine("Done");
+        Console.WriteLine("Q2 (346 songs): " + distribution.GetValueOrDefault(346));
+        Console.WriteLine("Q3 (max): " + (distribution.Any() ? distribution.Keys.Max() : 0));
     }
 }
